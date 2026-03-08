@@ -4,7 +4,7 @@ import { History, CheckCircle2, ShieldAlert, AlertTriangle, Search, Filter } fro
 import axios from 'axios';
 import { format } from 'date-fns';
 
-export const TransactionHistory = ({ userId, theme }: { userId: string, theme: 'light' | 'dark' }) => {
+export const TransactionHistory = ({ userId, theme, onAction }: { userId: string, theme: 'light' | 'dark', onAction: (msg: string, type?: 'info' | 'success' | 'error') => void }) => {
   const [history, setHistory] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -42,9 +42,12 @@ export const TransactionHistory = ({ userId, theme }: { userId: string, theme: '
               }`}
             />
           </div>
-          <button className={`p-2 rounded-xl transition-colors border ${
-            theme === 'dark' ? 'bg-white/5 border-white/10 text-slate-400 hover:text-white' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50 shadow-sm'
-          }`}>
+          <button 
+            onClick={() => onAction("Filtering options are coming soon.", "info")}
+            className={`p-2 rounded-xl transition-colors border ${
+              theme === 'dark' ? 'bg-white/5 border-white/10 text-slate-400 hover:text-white' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50 shadow-sm'
+            }`}
+          >
             <Filter size={20} />
           </button>
         </div>
@@ -62,6 +65,7 @@ export const TransactionHistory = ({ userId, theme }: { userId: string, theme: '
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
+              onClick={() => onAction(`Transaction ID: ${tx.id.substring(0, 8)}...`, "info")}
               className={`p-4 rounded-2xl flex items-center justify-between transition-all cursor-pointer group border ${
                 theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-white border-slate-200 hover:border-indigo-200 hover:shadow-md shadow-sm'
               }`}

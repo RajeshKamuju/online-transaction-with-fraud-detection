@@ -62,6 +62,53 @@ db.exec(`
 `);
 
 // Seed Mock Data
+const seedContactsForUser = (userId: string) => {
+  const insertContact = db.prepare(`INSERT OR IGNORE INTO contacts (id, user_id, name, upi_id, avatar) VALUES (?, ?, ?, ?, ?)`);
+  const names = [
+    "John Doe", "Jane Smith", "Alice Johnson", "Bob Brown", "Charlie Davis", 
+    "Eve Wilson", "Frank Moore", "Grace Taylor", "Hank Anderson", "Ivy Thomas", 
+    "Jack White", "Kelly Green", "Liam Black", "Mia Grey", "Noah Blue", 
+    "Olivia Red", "Peter Pink", "Quinn Gold", "Rose Silver", "Sam Bronze", 
+    "Tina Lead", "Uma Zinc", "Victor Iron", "Wendy Steel", "Xander Copper", 
+    "Yara Brass", "Zane Nickel", "Amy Quartz", "Ben Flint", "Cora Jade",
+    "David Miller", "Emma Wilson", "Felix Wright", "Gina Hall", "Harry Potter",
+    "Isla Fisher", "Kevin Hart", "Luna Lovegood", "Miles Morales", "Nora Jones",
+    "Oscar Wilde", "Penny Lane", "Riley Reid", "Stella Artois", "Tony Stark",
+    "Ursula Corbero", "Vince Vaughn", "Will Smith", "Xena Warrior", "Yoda Master",
+    "Zelda Legend", "Arthur Morgan", "Bruce Wayne", "Clark Kent", "Diana Prince",
+    "Edward Norton", "Frodo Baggins", "Gandalf Grey", "Hermione Granger", "Indiana Jones"
+  ];
+  names.forEach((name, i) => {
+    const contactId = `c_${userId}_${i}`;
+    insertContact.run(contactId, userId, name, `${name.toLowerCase().replace(/\s+/g, ".")}@upi`, `https://picsum.photos/seed/${name}/200`);
+  });
+};
+
+const seedTransactionsForUser = (userId: string) => {
+  const txCount = db.prepare("SELECT COUNT(*) as count FROM transactions WHERE user_id = ?").get(userId) as { count: number };
+  if (txCount.count === 0) {
+    const insertTx = db.prepare(`
+      INSERT INTO transactions (id, user_id, recipient_name, amount, timestamp, type, status, risk_score, reason_codes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    
+    const transactions = [
+      { name: "John Doe", amount: 500, status: "SAFE" },
+      { name: "Alice Johnson", amount: 1200, status: "SAFE" },
+      { name: "Unknown Merchant", amount: 15000, status: "FLAGGED", reasons: "ANOMALOUS_AMOUNT" },
+      { name: "Suspicious Account", amount: 5000, status: "BLOCKED", reasons: "VELOCITY_ATTACK" },
+      { name: "Zelda Legend", amount: 250, status: "SAFE" },
+      { name: "Tony Stark", amount: 9999, status: "SAFE" },
+    ];
+
+    transactions.forEach((tx, i) => {
+      const id = `tx_seed_${userId}_${i}`;
+      const timestamp = Date.now() - (i * 86400000); // One day apart
+      insertTx.run(id, userId, tx.name, tx.amount, timestamp, 'TRANSFER', tx.status, tx.status === 'SAFE' ? 5 : 85, tx.reasons || "");
+    });
+  }
+};
+
 const seedData = () => {
   const userCount = db.prepare("SELECT COUNT(*) as count FROM users").get() as { count: number };
   if (userCount.count === 0) {
@@ -70,15 +117,11 @@ const seedData = () => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
-    insertUser.run("user_1", "Rajesh Kamuju", "rajesh.kamuju93@gmail.com", "pass123", "123456", 1000, 19.076, 72.877, Date.now() - 3600000, "verified", 42850);
-    
-    // Seed 30 Contacts
-    const insertContact = db.prepare(`INSERT INTO contacts (id, user_id, name, upi_id, avatar) VALUES (?, ?, ?, ?, ?)`);
-    const names = ["John Doe", "Jane Smith", "Alice Johnson", "Bob Brown", "Charlie Davis", "Eve Wilson", "Frank Moore", "Grace Taylor", "Hank Anderson", "Ivy Thomas", "Jack White", "Kelly Green", "Liam Black", "Mia Grey", "Noah Blue", "Olivia Red", "Peter Pink", "Quinn Gold", "Rose Silver", "Sam Bronze", "Tina Lead", "Uma Zinc", "Victor Iron", "Wendy Steel", "Xander Copper", "Yara Brass", "Zane Nickel", "Amy Quartz", "Ben Flint", "Cora Jade"];
-    names.forEach((name, i) => {
-      insertContact.run(`c_${i}`, "user_1", name, `${name.toLowerCase().replace(" ", ".")}@upi`, `https://picsum.photos/seed/${name}/200`);
-    });
+    const userId = "user_1";
+    insertUser.run(userId, "Rajesh Kamuju", "rajesh.kamuju93@gmail.com", "pass123", "123456", 1000, 19.076, 72.877, Date.now() - 3600000, "verified", 42850);
   }
+  seedContactsForUser("user_1");
+  seedTransactionsForUser("user_1");
 };
 seedData();
 
@@ -151,6 +194,7 @@ async function startServer() {
     const { email, password } = req.body;
     const user = db.prepare("SELECT * FROM users WHERE email = ? AND password = ?").get(email, password) as any;
     if (user) {
+      seedContactsForUser(user.id);
       res.json(user);
     } else {
       res.status(401).json({ error: "Invalid credentials" });
@@ -163,6 +207,7 @@ async function startServer() {
       const id = `user_${Date.now()}`;
       db.prepare("INSERT INTO users (id, name, email, password, money_password) VALUES (?, ?, ?, ?, ?)")
         .run(id, name, email, password, moneyPassword);
+      seedContactsForUser(id);
       const user = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
       res.json(user);
     } catch (e) {
@@ -178,6 +223,13 @@ async function startServer() {
 
   // User & Contacts
   app.get("/api/user/:id", (req, res) => {
+    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.params.id);
+    res.json(user);
+  });
+
+  app.post("/api/user/:id/add-funds", (req, res) => {
+    const { amount } = req.body;
+    db.prepare("UPDATE users SET balance = balance + ? WHERE id = ?").run(amount, req.params.id);
     const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.params.id);
     res.json(user);
   });

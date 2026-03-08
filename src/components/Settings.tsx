@@ -2,11 +2,11 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { User, Shield, Lock, Moon, Sun, CreditCard, ArrowRight, ChevronRight } from 'lucide-react';
 
-export const Settings = ({ user, theme, onThemeToggle, onLogout }: { user: any, theme: 'light' | 'dark', onThemeToggle: () => void, onLogout: () => void }) => {
+export const Settings = ({ user, theme, onThemeToggle, onLogout, onAction }: { user: any, theme: 'light' | 'dark', onThemeToggle: () => void, onLogout: () => void, onAction: (msg: string, type?: 'info' | 'success' | 'error') => void }) => {
   const sections = [
-    { title: "Profile", icon: User, desc: "Manage your personal information", status: user.kyc_status === 'verified' ? "Verified" : "Pending" },
-    { title: "Security", icon: Shield, desc: "Login password & Money Password" },
-    { title: "Cards", icon: CreditCard, desc: "Manage linked credit/debit cards", alert: true },
+    { title: "Profile", icon: User, desc: "Manage your personal information", status: user.kyc_status === 'verified' ? "Verified" : "Pending", action: () => onAction("Profile editing is disabled in demo mode.", "info") },
+    { title: "Security", icon: Shield, desc: "Login password & Money Password", action: () => onAction("Security settings are locked.", "error") },
+    { title: "Cards", icon: CreditCard, desc: "Manage linked credit/debit cards", alert: true, action: () => onAction("Card management is coming soon.", "info") },
     { title: "Theme", icon: theme === 'dark' ? Moon : Sun, desc: `Currently using ${theme} mode`, toggle: true }
   ];
 
@@ -32,6 +32,7 @@ export const Settings = ({ user, theme, onThemeToggle, onLogout }: { user: any, 
           <motion.div
             key={i}
             whileHover={{ x: 4 }}
+            onClick={() => section.action && section.action()}
             className={`p-6 rounded-[2rem] flex items-center justify-between cursor-pointer transition-all border ${
               theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10 text-white' : 'bg-white border-slate-200 hover:border-indigo-200 hover:shadow-md shadow-sm text-slate-900'
             }`}
@@ -71,7 +72,10 @@ export const Settings = ({ user, theme, onThemeToggle, onLogout }: { user: any, 
         }`}>
           <h3 className="text-red-500 font-bold mb-1 text-sm">Emergency Exit</h3>
           <p className="text-slate-500 text-[10px] mb-4">Freeze all transactions.</p>
-          <button className="w-full bg-red-600 hover:bg-red-500 text-white py-2 rounded-xl text-xs font-bold transition-all">
+          <button 
+            onClick={() => onAction("Account frozen successfully for your safety.", "success")}
+            className="w-full bg-red-600 hover:bg-red-500 text-white py-2 rounded-xl text-xs font-bold transition-all"
+          >
             Freeze
           </button>
         </div>

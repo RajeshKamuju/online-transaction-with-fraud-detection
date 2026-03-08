@@ -13,6 +13,8 @@ import { Settings } from './Settings';
 export const SuperAppHome = ({ user, theme, onThemeToggle, onLogout }: { user: any, theme: 'light' | 'dark', onThemeToggle: () => void, onLogout: () => void }) => {
   const [activeTab, setActiveTab] = useState<'home' | 'history' | 'settings'>('home');
   const [isPaying, setIsPaying] = useState(false);
+  const [isAddingFunds, setIsAddingFunds] = useState(false);
+  const [addAmount, setAddAmount] = useState('500');
   const [selectedContact, setSelectedContact] = useState<any>(null);
   const [payAmount, setPayAmount] = useState('');
   const [moneyPassword, setMoneyPassword] = useState('');
@@ -21,7 +23,15 @@ export const SuperAppHome = ({ user, theme, onThemeToggle, onLogout }: { user: a
   const [alerts, setAlerts] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
   const [searchContact, setSearchContact] = useState('');
+  const [mobileNumber, setMobileNumber] = useState('');
+  const [payMethod, setPayMethod] = useState<'contacts' | 'mobile'>('contacts');
   const [pinStartTime, setPinStartTime] = useState<number | null>(null);
+  const [notification, setNotification] = useState<{ message: string, type: 'info' | 'success' | 'error' } | null>(null);
+
+  const showNotification = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 3000);
+  };
 
   useEffect(() => {
     fetchAlerts();
@@ -61,19 +71,29 @@ export const SuperAppHome = ({ user, theme, onThemeToggle, onLogout }: { user: a
     try {
       await new Promise(r => setTimeout(r, 2000));
       
+      const recipientName = selectedContact ? selectedContact.name : `Mobile: ${mobileNumber}`;
+      
       const res = await axios.post('/api/predict', {
         userId: user.id,
         amount: Number(payAmount),
         lat,
         lng,
         ipAddress: '192.168.1.42',
-        recipientName: selectedContact.name,
+        recipientName,
         moneyPassword,
         typingSpeed
       });
 
       setVerdict(res.data);
       setPaymentStatus(res.data.status === 'BLOCKED' ? 'fraud' : 'success');
+      
+      // Send notification to mobile number if provided
+      if (mobileNumber || (selectedContact && selectedContact.upi_id.includes('@upi'))) {
+        const target = mobileNumber || selectedContact.name;
+        const statusMsg = res.data.status === 'BLOCKED' ? 'FRAUD ALERT: Transaction blocked.' : 'Payment of ₹' + payAmount + ' successful.';
+        showNotification(`SMS sent to ${target}: ${statusMsg}`, 'info');
+      }
+      
       fetchAlerts();
     } catch (e: any) {
       alert(e.response?.data?.error || "Payment failed");
@@ -86,8 +106,49 @@ export const SuperAppHome = ({ user, theme, onThemeToggle, onLogout }: { user: a
     setPayAmount('');
     setMoneyPassword('');
     setSelectedContact(null);
+    setMobileNumber('');
+    setPayMethod('contacts');
     setIsPaying(false);
     setVerdict(null);
+  };
+
+  const handleAddFunds = async () => {
+    try {
+      const res = await axios.post(`/api/user/${user.id}/add-funds`, { amount: parseFloat(addAmount) });
+      // We need to update the user state in the parent component
+      // Assuming onUserUpdate is passed or we can just refresh the page
+      // For now, let's assume we need to update it locally if possible or just show success
+      showNotification(`₹${addAmount} added to your wallet!`, 'success');
+      setIsAddingFunds(false);
+      window.location.reload(); // Simple way to refresh user data
+    } catch (e) {
+      showNotification('Failed to add funds.', 'error');
+    }
+  };
+
+  const handleScanQR = () => {
+    if (contacts.length > 0) {
+      const randomContact = contacts[Math.floor(Math.random() * contacts.length)];
+      setSelectedContact(randomContact);
+      setIsPaying(true);
+      showNotification(`QR Scanned: ${randomContact.name}`, 'success');
+    } else {
+      showNotification('No contacts available to scan.', 'error');
+    }
+  };
+
+  const handleMockService = (service: string) => {
+    showNotification(`Processing ${service} payment...`, 'info');
+    setTimeout(() => {
+      showNotification(`${service} payment successful!`, 'success');
+    }, 2000);
+  };
+
+  const handleBankTransfer = () => {
+    showNotification('Initiating bank transfer...', 'info');
+    setTimeout(() => {
+      showNotification('Bank transfer successful!', 'success');
+    }, 2500);
   };
 
   const filteredContacts = contacts.filter(c => c.name.toLowerCase().includes(searchContact.toLowerCase()));
@@ -105,14 +166,17 @@ export const SuperAppHome = ({ user, theme, onThemeToggle, onLogout }: { user: a
           </div>
           
           <div className="flex items-center gap-4">
-            <div className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border ${theme === 'dark' ? 'bg-green-500/10 border-green-500/20' : 'bg-green-50 border-green-100'}`}>
+            <button 
+              onClick={() => showNotification('Security system is active and monitoring for threats.', 'success')}
+              className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all hover:shadow-md ${theme === 'dark' ? 'bg-green-500/10 border-green-500/20' : 'bg-green-50 border-green-100'}`}
+            >
               <motion.div 
                 animate={{ scale: [1, 1.2, 1] }} 
                 transition={{ repeat: Infinity, duration: 2 }}
                 className="w-2 h-2 bg-green-500 rounded-full" 
               />
               <span className="text-[10px] font-bold text-green-600 uppercase tracking-widest">Security Heartbeat</span>
-            </div>
+            </button>
             <button onClick={onThemeToggle} className={`p-2 rounded-xl border transition-all ${theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10 text-white' : 'bg-white border-slate-200 hover:bg-slate-50 shadow-sm text-slate-600'}`}>
               {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
             </button>
@@ -150,10 +214,10 @@ export const SuperAppHome = ({ user, theme, onThemeToggle, onLogout }: { user: a
                 {/* Quick Actions */}
                 <section className="grid grid-cols-4 gap-4">
                     {[
-                      { label: 'Scan QR', icon: QrCode, color: theme === 'dark' ? 'bg-indigo-500' : 'bg-indigo-50 text-indigo-600' },
+                      { label: 'Scan QR', icon: QrCode, color: theme === 'dark' ? 'bg-indigo-500' : 'bg-indigo-50 text-indigo-600', onClick: handleScanQR },
                       { label: 'Contacts', icon: ContactIcon, color: theme === 'dark' ? 'bg-emerald-500' : 'bg-emerald-50 text-emerald-600', onClick: () => setIsPaying(true) },
-                      { label: 'To Bank', icon: Landmark, color: theme === 'dark' ? 'bg-amber-500' : 'bg-amber-50 text-amber-600' },
-                      { label: 'Balance', icon: Wallet, color: theme === 'dark' ? 'bg-rose-500' : 'bg-rose-50 text-rose-600' },
+                      { label: 'To Bank', icon: Landmark, color: theme === 'dark' ? 'bg-amber-500' : 'bg-amber-50 text-amber-600', onClick: handleBankTransfer },
+                      { label: 'Balance', icon: Wallet, color: theme === 'dark' ? 'bg-rose-500' : 'bg-rose-50 text-rose-600', onClick: () => showNotification(`Your current balance is ₹${user.balance?.toLocaleString()}`, 'success') },
                     ].map((item, i) => (
                     <motion.button
                       key={i}
@@ -202,7 +266,11 @@ export const SuperAppHome = ({ user, theme, onThemeToggle, onLogout }: { user: a
                       { label: 'Gas', icon: Zap },
                       { label: 'More', icon: ArrowRight },
                     ].map((item, i) => (
-                      <button key={i} className="flex flex-col items-center gap-3 group">
+                      <button 
+                        key={i} 
+                        onClick={() => handleMockService(item.label)}
+                        className="flex flex-col items-center gap-3 group"
+                      >
                         <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${theme === 'dark' ? 'bg-white/5 group-hover:bg-white/10' : 'bg-slate-50 group-hover:bg-slate-100'}`}>
                           <item.icon size={20} className="text-indigo-500" />
                         </div>
@@ -231,7 +299,10 @@ export const SuperAppHome = ({ user, theme, onThemeToggle, onLogout }: { user: a
                     >
                       Send Money <ArrowRight size={18} />
                     </button>
-                    <button className={`w-full py-4 rounded-2xl font-bold transition-all border ${theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-600'}`}>
+                    <button 
+                      onClick={() => setIsAddingFunds(true)}
+                      className={`w-full py-4 rounded-2xl font-bold transition-all border ${theme === 'dark' ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-600'}`}
+                    >
                       Add Funds
                     </button>
                   </div>
@@ -258,8 +329,8 @@ export const SuperAppHome = ({ user, theme, onThemeToggle, onLogout }: { user: a
             </div>
           )}
 
-          {activeTab === 'history' && <TransactionHistory userId={user.id} theme={theme} />}
-          {activeTab === 'settings' && <Settings user={user} theme={theme} onThemeToggle={onThemeToggle} onLogout={onLogout} />}
+          {activeTab === 'history' && <TransactionHistory userId={user.id} theme={theme} onAction={showNotification} />}
+          {activeTab === 'settings' && <Settings user={user} theme={theme} onThemeToggle={onThemeToggle} onLogout={onLogout} onAction={showNotification} />}
         </div>
       </main>
 
@@ -281,34 +352,74 @@ export const SuperAppHome = ({ user, theme, onThemeToggle, onLogout }: { user: a
               {paymentStatus === 'idle' && !selectedContact && (
                 <div className="p-8">
                   <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold">Select Contact</h2>
+                    <h2 className="text-2xl font-bold">Send Money</h2>
                     <button onClick={() => setIsPaying(false)} className={`transition-colors ${theme === 'dark' ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'}`}><X /></button>
                   </div>
-                  <div className="relative mb-6">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                    <input 
-                      type="text" 
-                      placeholder="Search 30+ verified contacts..." 
-                      value={searchContact}
-                      onChange={(e) => setSearchContact(e.target.value)}
-                      className={`w-full rounded-2xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:border-indigo-500 border ${theme === 'dark' ? 'bg-white/5 border-white/10' : 'bg-slate-50 border-slate-200'}`}
-                    />
+
+                  <div className="flex gap-2 mb-6 p-1 bg-slate-100 dark:bg-white/5 rounded-2xl">
+                    <button 
+                      onClick={() => setPayMethod('contacts')}
+                      className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${payMethod === 'contacts' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600' : 'text-slate-500'}`}
+                    >
+                      Contacts
+                    </button>
+                    <button 
+                      onClick={() => setPayMethod('mobile')}
+                      className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${payMethod === 'mobile' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600' : 'text-slate-500'}`}
+                    >
+                      Mobile Number
+                    </button>
                   </div>
-                  <div className="h-96 overflow-y-auto space-y-2 pr-2 scrollbar-hide">
-                    {filteredContacts.map((contact) => (
+
+                  {payMethod === 'contacts' ? (
+                    <>
+                      <div className="relative mb-6">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                        <input 
+                          type="text" 
+                          placeholder="Search 30+ verified contacts..." 
+                          value={searchContact}
+                          onChange={(e) => setSearchContact(e.target.value)}
+                          className={`w-full rounded-2xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:border-indigo-500 border ${theme === 'dark' ? 'bg-white/5 border-white/10' : 'bg-slate-50 border-slate-200'}`}
+                        />
+                      </div>
+                      <div className="h-96 overflow-y-auto space-y-2 pr-2 scrollbar-hide">
+                        {filteredContacts.map((contact) => (
+                          <button 
+                            key={contact.id}
+                            onClick={() => setSelectedContact(contact)}
+                            className={`w-full flex items-center gap-4 p-3 rounded-2xl transition-colors ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-slate-50'}`}
+                          >
+                            <img src={contact.avatar} alt="" className="w-10 h-10 rounded-full border border-slate-200" referrerPolicy="no-referrer" />
+                            <div className="text-left">
+                              <div className="font-bold text-sm">{contact.name}</div>
+                              <div className="text-[10px] text-slate-500 uppercase tracking-widest">{contact.upi_id}</div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="space-y-6">
+                      <div className="relative">
+                        <Smartphone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
+                        <input 
+                          type="tel" 
+                          placeholder="Enter 10-digit mobile number" 
+                          value={mobileNumber}
+                          onChange={(e) => setMobileNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                          className={`w-full rounded-2xl py-4 pl-12 pr-4 text-lg font-bold focus:outline-none focus:border-indigo-500 border ${theme === 'dark' ? 'bg-white/5 border-white/10' : 'bg-slate-50 border-slate-200'}`}
+                        />
+                      </div>
                       <button 
-                        key={contact.id}
-                        onClick={() => setSelectedContact(contact)}
-                        className={`w-full flex items-center gap-4 p-3 rounded-2xl transition-colors ${theme === 'dark' ? 'hover:bg-white/5' : 'hover:bg-slate-50'}`}
+                        disabled={mobileNumber.length !== 10}
+                        onClick={() => setSelectedContact({ name: `User (${mobileNumber})`, upi_id: `${mobileNumber}@upi`, avatar: `https://picsum.photos/seed/${mobileNumber}/200` })}
+                        className={`w-full py-4 rounded-2xl font-bold transition-all ${mobileNumber.length === 10 ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
                       >
-                        <img src={contact.avatar} alt="" className="w-10 h-10 rounded-full border border-slate-200" referrerPolicy="no-referrer" />
-                        <div className="text-left">
-                          <div className="font-bold text-sm">{contact.name}</div>
-                          <div className="text-[10px] text-slate-500 uppercase tracking-widest">{contact.upi_id}</div>
-                        </div>
+                        Proceed to Pay
                       </button>
-                    ))}
-                  </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -423,13 +534,92 @@ export const SuperAppHome = ({ user, theme, onThemeToggle, onLogout }: { user: a
                     >
                       Cancel
                     </button>
-                    <button className="flex-1 bg-red-600 text-white py-4 rounded-2xl font-bold transition-all">
+                    <button 
+                      onClick={() => showNotification('Fraud report submitted. Our team will investigate.', 'success')}
+                      className="flex-1 bg-red-600 text-white py-4 rounded-2xl font-bold transition-all"
+                    >
                       Report
                     </button>
                   </div>
                 </div>
               )}
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Add Funds Modal */}
+      <AnimatePresence>
+        {isAddingFunds && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              className={`w-full max-w-md rounded-[2.5rem] overflow-hidden shadow-2xl ${theme === 'dark' ? 'bg-slate-900 border border-white/10' : 'bg-white'}`}
+            >
+              <div className="p-8">
+                <div className="flex items-center justify-between mb-8">
+                  <h2 className="text-2xl font-bold">Add Funds</h2>
+                  <button onClick={() => setIsAddingFunds(false)} className="text-slate-500 hover:text-slate-900"><X /></button>
+                </div>
+                <div className="space-y-6">
+                  <div className="text-center">
+                    <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Enter Amount</div>
+                    <input 
+                      type="number" 
+                      value={addAmount}
+                      onChange={(e) => setAddAmount(e.target.value)}
+                      className={`w-full bg-transparent text-center text-6xl font-bold focus:outline-none ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}
+                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {['100', '500', '1000', '2000', '5000', '10000'].map(amt => (
+                      <button 
+                        key={amt}
+                        onClick={() => setAddAmount(amt)}
+                        className={`py-2 rounded-xl text-xs font-bold transition-all border ${addAmount === amt ? 'bg-indigo-600 border-indigo-600 text-white' : theme === 'dark' ? 'bg-white/5 border-white/10 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
+                      >
+                        ₹{amt}
+                      </button>
+                    ))}
+                  </div>
+                  <button 
+                    onClick={handleAddFunds}
+                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-4 rounded-2xl font-bold transition-all shadow-lg shadow-indigo-600/20"
+                  >
+                    Confirm Top-up
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Notification Toast */}
+      <AnimatePresence>
+        {notification && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[200]"
+          >
+            <div className={`px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border ${
+              notification.type === 'success' ? 'bg-emerald-500 text-white border-emerald-400' :
+              notification.type === 'error' ? 'bg-rose-500 text-white border-rose-400' :
+              'bg-indigo-600 text-white border-indigo-500'
+            }`}>
+              {notification.type === 'success' && <CheckCircle2 size={18} />}
+              {notification.type === 'error' && <ShieldAlert size={18} />}
+              {notification.type === 'info' && <Bell size={18} />}
+              <span className="text-sm font-bold">{notification.message}</span>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
