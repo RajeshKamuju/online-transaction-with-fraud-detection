@@ -1,0 +1,5 @@
+{
+  "name": "ShieldPay",
+  "description": "A high-performance Financial Super-App with real-time AI-driven Fraud Detection and a premium Glassmorphism UI.",
+  "requestFramePermissions": ["geolocation"]
+}
